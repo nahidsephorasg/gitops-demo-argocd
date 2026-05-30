@@ -166,6 +166,7 @@ jobs:
           IMAGE_DIGEST="${{ env.REGISTRY }}/${{ env.IMAGE }}@${{ steps.push.outputs.digest }}"
           
           cosign sign --yes \
+            --insecure-registry \
             --rekor-url https://rekor.sigstore.dev \
             "${IMAGE_DIGEST}"
           
@@ -177,6 +178,7 @@ jobs:
       - name: Attach SBOM attestation to image
         run: |
           cosign attest --yes \
+            --insecure-registry \
             --predicate sbom.cyclonedx.json \
             --type cyclonedx \
             "${{ env.IMAGE_DIGEST }}"
@@ -187,6 +189,7 @@ jobs:
       - name: Verify Cosign signature
         run: |
           cosign verify \
+            --insecure-registry \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             --certificate-identity "${{ github.server_url }}/${{ github.repository }}/.github/workflows/ci.yaml@refs/heads/main" \
             "${{ env.IMAGE_DIGEST }}"
