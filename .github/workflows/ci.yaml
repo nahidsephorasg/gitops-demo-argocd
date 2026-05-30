@@ -38,6 +38,7 @@ jobs:
       contents: read
       id-token: write        # REQUIRED for keyless Cosign (OIDC token)
       packages: write        # if using ghcr.io
+      security-events: write # REQUIRED for uploading SARIF to GitHub Security tab
 
     outputs:
       image-tag:    ${{ steps.tag.outputs.tag }}
@@ -113,7 +114,7 @@ jobs:
           output: trivy-results.sarif
           severity: "CRITICAL,HIGH"
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
