@@ -4,7 +4,7 @@ name: CI — Build, Scan, Sign, Push, Deploy
 on:
   push:
     paths:
-      - "gitops/app/**"
+      - "app/**"
     branches:
       - main
   workflow_dispatch:    # manual trigger (for demo / emergency patch)
