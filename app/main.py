@@ -1,6 +1,7 @@
 """
 GitOps Demo App
 
+
 Designed to make deployments *visible*:
 - /         → returns version, color, hostname (changes with every deploy)
 - /health   → liveness/readiness probe
