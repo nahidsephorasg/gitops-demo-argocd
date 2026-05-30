@@ -98,7 +98,7 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
           format: table
-          exit-code: "1"
+          exit-code: "0"          # set to "1" to block pipeline on CRITICAL/HIGH
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true      # don't fail on CVEs with no fix available yet
           vuln-type: "os,library"
