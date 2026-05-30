@@ -78,8 +78,8 @@ jobs:
       - name: Build image (no push yet — scan first)
         uses: docker/build-push-action@v7
         with:
-          context: gitops/app
-          file: gitops/app/Dockerfile
+          context: app
+          file: app/Dockerfile
           push: false
           load: true                              # load into local daemon for Trivy
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
@@ -134,8 +134,8 @@ jobs:
         id: push
         uses: docker/build-push-action@v5
         with:
-          context: gitops/app
-          file: gitops/app/Dockerfile
+          context: app
+          file: app/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
