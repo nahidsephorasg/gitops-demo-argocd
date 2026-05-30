@@ -1,0 +1,45 @@
+# App of Apps — root application
+#
+# This is the ONLY app you ever apply manually:
+#   kubectl apply -f /argocd/app-of-apps.yaml
+#
+# It watches /argocd in Git and creates every app-*.yaml and
+# project-*.yaml found there. After this, Git push = deploy.
+#
+# Structure:
+#   app-of-apps.yaml (this file, applied once)
+#     └── watches /argocd
+#           ├── project-platform.yaml    → creates platform AppProject
+#           ├── project.yaml             → creates gitops-demo AppProject
+#           ├── app-tetragon.yaml        → ArgoCD deploys Tetragon
+#           ├── app-gitops-demo-dev.yaml → ArgoCD deploys demo app
+#           └── app-*.yaml              → any future apps auto-discovered
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/component: app-of-apps
+    app.kubernetes.io/part-of: platform
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/nahidsephorasg/gitops-demo-argocd.git
+    targetRevision: main
+    path: argocd
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

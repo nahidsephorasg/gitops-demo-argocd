@@ -1,0 +1,38 @@
+# ArgoCD Project — platform tools (Tetragon, Kyverno, etc.)
+# Scoped to cluster-wide security/observability tooling deployed by the platform team.
+# Allows Helm chart registries as source (not just Git repos).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: "Platform tools — security, observability, policy"
+
+  # Allow both Git and Helm chart registries
+  sourceRepos:
+    - "https://github.com/nahidsephorasg/gitops-demo-argocd.git"
+    - "https://helm.cilium.io"
+    - "https://kyverno.github.io/kyverno"
+    - "https://prometheus-community.github.io/helm-charts"
+
+  # Platform tools deploy to infra namespaces
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+    - server: https://kubernetes.default.svc
+      namespace: kyverno
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+
+  # Platform tools need cluster-scoped resources (CRDs, ClusterRoles, etc.)
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  orphanedResources:
+    warn: true

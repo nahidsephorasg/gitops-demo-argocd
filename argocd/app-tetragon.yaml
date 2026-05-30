@@ -1,0 +1,79 @@
+# ArgoCD Application — Tetragon (eBPF runtime security, Cilium project)
+#
+# Deploys Tetragon via the official Cilium Helm chart.
+# Tetragon runs as a DaemonSet in kube-system and requires the host /proc
+# filesystem to be mounted. The kind cluster must be created with:
+#
+#   extraMounts:
+#     - hostPath: /proc
+#       containerPath: /procHost
+#
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tetragon
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: platform
+spec:
+  project: platform
+
+  source:
+    repoURL: https://helm.cilium.io
+    chart: tetragon
+    targetRevision: "1.7.0"
+    helm:
+      releaseName: tetragon
+      values: |
+        # Required for Kind: host /proc is mounted at /procHost on each node
+        tetragon:
+          hostProcPath: /procHost
+
+          # Export events to stdout for easy kubectl logs inspection
+          exportFilename: stdout
+
+          # Increase ring buffer for high-event environments
+          btf: ""
+
+        # Operator — manages TracingPolicy CRDs
+        tetragonOperator:
+          enabled: true
+
+        # Export events via gRPC (used by tetra CLI)
+        export:
+          stdout:
+            enabledCommand: true
+            enabledArgs: true
+            enabledEnvVars: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+      # Tetragon CRDs can be large; skip diff on those
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences in generated fields on DaemonSet/Deployment
+  ignoreDifferences:
+    - group: apps
+      kind: DaemonSet
+      name: tetragon
+      jsonPointers:
+        - /spec/template/metadata/annotations
