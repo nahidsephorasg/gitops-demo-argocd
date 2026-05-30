@@ -39,6 +39,13 @@ spec:
           # Increase ring buffer for high-event environments
           btf: ""
 
+          # Expose Prometheus metrics on :2112/metrics
+          prometheus:
+            enabled: true
+            port: 2112
+            serviceMonitor:
+              enabled: true   # scraped by kube-prometheus-stack
+
         # Operator — manages TracingPolicy CRDs
         tetragonOperator:
           enabled: true
