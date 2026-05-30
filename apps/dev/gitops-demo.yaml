@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: gitops-demo
-          image: ghcr.io/nahidsephorasg/gitops-demo:latest
+          image: ghcr.io/nahidsephorasg/gitops-demo:77a8e88
           ports:
             - containerPort: 8080
           env:
