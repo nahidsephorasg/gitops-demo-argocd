@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/nahidsephorasg/gitops-demo-argocd.git
     targetRevision: main
-    path: gitops/test
+    path: test
   destination:
     server: https://kubernetes.default.svc
     namespace: gitops-demo
