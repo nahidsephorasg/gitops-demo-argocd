@@ -56,6 +56,15 @@ jobs:
       # ── 3. Build with docker/build-push-action ─────────────────────────────
       # WHY: Reproducible multi-stage build; --provenance=true generates SLSA
       # provenance metadata automatically.
+      # Configure Docker daemon to allow HTTP (insecure) registry
+      # Harbor has no TLS cert — runner Docker daemon defaults to HTTPS
+      - name: Configure insecure registry
+        run: |
+          sudo bash -c 'cat > /etc/docker/daemon.json <<EOF
+          {"insecure-registries": ["${{ env.REGISTRY }}"]}
+          EOF'
+          sudo systemctl restart docker
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
