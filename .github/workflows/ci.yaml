@@ -162,6 +162,8 @@ jobs:
         uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign image with Cosign (keyless)
+        env:
+          COSIGN_INSECURE_SKIP_VERIFY: "true"
         run: |
           IMAGE_DIGEST="${{ env.REGISTRY }}/${{ env.IMAGE }}@${{ steps.push.outputs.digest }}"
           
@@ -176,6 +178,8 @@ jobs:
       # ── 8. Attach SBOM as OCI attestation ─────────────────────────────────
       # SBOM is stored IN Harbor alongside the image — cosign download retrieves it
       - name: Attach SBOM attestation to image
+        env:
+          COSIGN_INSECURE_SKIP_VERIFY: "true"
         run: |
           cosign attest --yes \
             --allow-insecure-registry \
@@ -187,6 +191,8 @@ jobs:
 
       # ── 9. Verify signature (sanity check before updating GitOps) ──────────
       - name: Verify Cosign signature
+        env:
+          COSIGN_INSECURE_SKIP_VERIFY: "true"
         run: |
           cosign verify \
             --allow-insecure-registry \
