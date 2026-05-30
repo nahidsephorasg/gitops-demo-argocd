@@ -1,0 +1,182 @@
+name: CI — Build, Scan, Sign, Push, Deploy
+
+# Triggers: every push to main that changes the app
+on:
+  push:
+    paths:
+      - "gitops/app/**"
+    branches:
+      - main
+  workflow_dispatch:    # manual trigger (for demo / emergency patch)
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+env:
+  # ── Harbor ──────────────────────────────────────────────────────────────
+  # Set HARBOR_REGISTRY in: GitHub repo → Settings → Environments → Secrets and variables
+  # e.g. HARBOR_REGISTRY = 13.229.91.116:30002
+  REGISTRY: ${{ vars.HARBOR_REGISTRY }}
+  IMAGE:    ${{ vars.HARBOR_IMAGE }}
+
+  # ── Fallback for GitHub-hosted runners: use ghcr.io instead ──────────────
+  # REGISTRY: ghcr.io
+  # IMAGE:    ${{ github.repository_owner }}/gitops-demo
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 1: Build → Scan → Sign → Push
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-scan-sign:
+    name: "Build · Scan · Sign"
+    runs-on: ubuntu-latest   # swap to [self-hosted, ec2] for Harbor access
+    permissions:
+      contents: read
+      id-token: write        # REQUIRED for keyless Cosign (OIDC token)
+      packages: write        # if using ghcr.io
+
+    outputs:
+      image-tag:    ${{ steps.tag.outputs.tag }}
+      image-digest: ${{ steps.push.outputs.digest }}
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # ── 2. Compute image tag (short commit SHA) ────────────────────────────
+      - name: Compute image tag
+        id: tag
+        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # ── 3. Build with docker/build-push-action ─────────────────────────────
+      # WHY: Reproducible multi-stage build; --provenance=true generates SLSA
+      # provenance metadata automatically.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Harbor
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USER }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Build image (no push yet — scan first)
+        uses: docker/build-push-action@v7
+        with:
+          context: gitops/app
+          file: gitops/app/Dockerfile
+          push: false
+          load: true                              # load into local daemon for Trivy
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          build-args: |
+            APP_VERSION=${{ steps.tag.outputs.tag }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE }}:cache
+          cache-to: type=inline
+          # provenance=true adds SLSA Build provenance to the OCI manifest
+          provenance: true
+          sbom: true                              # also generates SPDX SBOM
+
+      # ── 4. Trivy scan — GATE: fail on CRITICAL/HIGH ────────────────────────
+      # "Trivy" + "vulnerability management" + "patch SLAs"
+      # Exit code 1 = pipeline fails → image is never pushed to Harbor
+      - name: Trivy — Scan for CVEs
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          format: table
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true      # don't fail on CVEs with no fix available yet
+          vuln-type: "os,library"
+
+      # Trivy SARIF report (uploaded to GitHub Security tab)
+      - name: Trivy — SARIF upload
+        uses: aquasecurity/trivy-action@master
+        if: always()               # run even if previous scan step failed
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: "CRITICAL,HIGH"
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      # ── 5. Generate SBOM with Syft ─────────────────────────────────────────
+      # "SBOMs" + "SLSA v1.1" + "supply chain security"
+      # Produces CycloneDX JSON — NTIA-minimum-elements compliant
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+          artifact-name: sbom-${{ steps.tag.outputs.tag }}.json
+
+      # ── 6. Push image to Harbor ────────────────────────────────────────────
+      - name: Push image to Harbor
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: gitops/app
+          file: gitops/app/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
+          build-args: |
+            APP_VERSION=${{ steps.tag.outputs.tag }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE }}:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE }}:cache,mode=max
+          provenance: true
+          sbom: true
+
+      # ── 7. Cosign — sign image (keyless OIDC) ──────────────────────────────
+      # "supply chain security (SLSA v1.1)"
+      # Keyless = uses GitHub OIDC identity. No private key to manage or rotate.
+      # Signature stored in Harbor as OCI artifact alongside the image.
+      # Kyverno admission policy verifies this signature before allowing pods.
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign image with Cosign (keyless)
+        run: |
+          IMAGE_DIGEST="${{ env.REGISTRY }}/${{ env.IMAGE }}@${{ steps.push.outputs.digest }}"
+          
+          cosign sign --yes \
+            --rekor-url https://rekor.sigstore.dev \
+            "${IMAGE_DIGEST}"
+          
+          echo "✅ Signed: ${IMAGE_DIGEST}"
+          echo "IMAGE_DIGEST=${IMAGE_DIGEST}" >> $GITHUB_ENV
+
+      # ── 8. Attach SBOM as OCI attestation ─────────────────────────────────
+      # SBOM is stored IN Harbor alongside the image — cosign download retrieves it
+      - name: Attach SBOM attestation to image
+        run: |
+          cosign attest --yes \
+            --predicate sbom.cyclonedx.json \
+            --type cyclonedx \
+            "${{ env.IMAGE_DIGEST }}"
+          
+          echo "✅ SBOM attached as OCI attestation"
+
+      # ── 9. Verify signature (sanity check before updating GitOps) ──────────
+      - name: Verify Cosign signature
+        run: |
+          cosign verify \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "${{ github.server_url }}/${{ github.repository }}/.github/workflows/ci.yaml@refs/heads/main" \
+            "${{ env.IMAGE_DIGEST }}"
+          
+          echo "✅ Signature verified"
+
+  # JOB 2: Update GitOps manifests — TODO: add later
