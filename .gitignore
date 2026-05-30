@@ -1,0 +1,41 @@
+# ── Cosign keys (NEVER commit private keys) ──────────────────────────────────
+scripts/cosign.key
+cosign.key
+*.key
+
+# ── Secrets / credentials ─────────────────────────────────────────────────────
+*.env
+.env
+.env.*
+secrets.yaml
+*-secret.yaml
+secrets/
+
+# ── Helm / Helmfile ───────────────────────────────────────────────────────────
+helmfile/charts/
+helmfile/.helmfile-cache/
+helmfile/*/charts/
+*.tgz
+helmfile-state/
+
+# ── Kustomize build output ────────────────────────────────────────────────────
+rendered.yaml
+kustomize-output/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+app/__pycache__/
+app/*.pyc
+app/.venv/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+*.bak
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ── CI artifacts ─────────────────────────────────────────────────────────────
+trivy-results.sarif
+sbom.cyclonedx.json
+provenance.json

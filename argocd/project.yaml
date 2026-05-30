@@ -1,0 +1,31 @@
+# ArgoCD Project — scopes what repos/clusters this project can touch
+# Prevents team-a apps from deploying to kube-system etc.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: gitops-demo
+  namespace: argocd
+spec:
+  description: "GitOps demo project"
+
+  # Which Git repos this project may use as source
+  sourceRepos:
+    - "https://github.com/nahidsephorasg/gitops-demo-argocd.git"
+
+  # Which clusters + namespaces apps in this project may deploy to
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: gitops-demo
+
+  # What Kubernetes resources apps in this project may create
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Orphaned resources — warn if something exists in namespace but not in Git
+  orphanedResources:
+    warn: true
