@@ -1,0 +1,15 @@
+# TracingPolicy — capture all process exec events on every node
+# Tetragon uses eBPF kprobes to trace sys_execve at kernel level.
+# Events appear in: kubectl logs ds/tetragon -n kube-system -c export-stdout
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: process-exec-trace
+spec:
+  kprobes:
+    - call: "__x64_sys_execve"
+      syscall: true
+      return: false
+      args:
+        - index: 0
+          type: "string"

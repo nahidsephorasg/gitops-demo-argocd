@@ -1,0 +1,37 @@
+# ArgoCD Application — Tetragon TracingPolicies
+#
+# Manages TracingPolicy CRDs from Git — the eBPF tracing rules for Tetragon.
+# Tetragon (the DaemonSet) must already be running before this syncs.
+#
+# Source of truth: k8s/tetragon/ in Git
+# Add new policies there → push → ArgoCD applies them automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tetragon-policies
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: platform
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/nahidsephorasg/gitops-demo-argocd.git
+    targetRevision: main
+    path: security/tetragon
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
